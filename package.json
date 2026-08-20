@@ -1,0 +1,16 @@
+{
+  "name": "rummy-multiplayer",
+  "version": "1.0.0",
+  "description": "Multiplayer online Rummy game (up to 10 players) with in-memory cache and Tailwind CSS",
+  "main": "backend/server.js",
+  "scripts": {
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "dev:server": "node backend/server.js",
+    "dev:client": "npm run dev --prefix frontend",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "test:engine": "node backend/tests/testEngine.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

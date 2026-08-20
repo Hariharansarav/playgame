@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Glassmorphism Classes */
+.glass {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-light {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-poker {
+  background: rgba(20, 83, 45, 0.85);
+  backdrop-filter: blur(10px);
+  border: 2px solid #ca8a04;
+}
+
+/* Card Suit Styling colors */
+.suit-red {
+  color: #ef4444;
+}
+
+.suit-black {
+  color: #f3f4f6;
+}
+
+/* Radial felt gradient background */
+.felt-radial {
+  background: radial-gradient(circle at center, #166534 0%, #14532d 40%, #064e3b 80%, #022c22 100%);
+}
