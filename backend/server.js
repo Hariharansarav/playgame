@@ -15,7 +15,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors({
-  origin: '*', // Allow all origins for play across different local systems
+  origin: true,
+  credentials: true
 }));
 
 app.use(express.json());
@@ -34,8 +35,12 @@ const httpServer = createServer(app);
 // Initialize Socket.io with open CORS rules for multiplayer local networks
 const io = new Server(httpServer, {
   cors: {
-    origin: '*',
+    origin: (origin, callback) => {
+      // Allow all origins dynamically to support local development and hosted clients
+      callback(null, true);
+    },
     methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
