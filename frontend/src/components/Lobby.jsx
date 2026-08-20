@@ -15,6 +15,7 @@ export default function Lobby({ socket, setPlayer, setRoom, room, player }) {
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [turnDuration, setTurnDuration] = useState(30);
   const [pointsLimit, setPointsLimit] = useState(101);
+  const [jokerMode, setJokerMode] = useState('open');
 
   const handleCreateRoom = (e) => {
     e.preventDefault();
@@ -26,7 +27,8 @@ export default function Lobby({ socket, setPlayer, setRoom, room, player }) {
       settings: {
         maxPlayers: parseInt(maxPlayers, 10),
         turnDuration: parseInt(turnDuration, 10),
-        pointsLimit: parseInt(pointsLimit, 10)
+        pointsLimit: parseInt(pointsLimit, 10),
+        jokerMode: jokerMode
       }
     }, (response) => {
       if (response.error) {
@@ -199,6 +201,10 @@ export default function Lobby({ socket, setPlayer, setRoom, room, player }) {
                 <span className="font-semibold text-gray-200">{room.settings.pointsLimit} Points</span>
               </div>
               <div className="flex items-center justify-between">
+                <span className="text-gray-400">Joker Configuration:</span>
+                <span className="font-semibold text-amber-400 capitalize">{room.settings.jokerMode || 'open'} Joker</span>
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="text-gray-400">Deck Configuration:</span>
                 <span className="font-semibold text-amber-500">
                   {room.settings.maxPlayers <= 3 ? '2 Decks (108 cards)' : room.settings.maxPlayers <= 6 ? '3 Decks (162 cards)' : '4 Decks (216 cards)'}
@@ -349,6 +355,27 @@ export default function Lobby({ socket, setPlayer, setRoom, room, player }) {
                     }`}
                   >
                     {score} Points
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Joker Mode Selector */}
+            <div>
+              <label className="block text-xs text-gray-400 font-medium mb-1.5">Joker Mode</label>
+              <div className="grid grid-cols-2 gap-2">
+                {['open', 'secret'].map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setJokerMode(mode)}
+                    className={`py-2.5 rounded-xl border text-xs font-semibold capitalize transition-all ${
+                      jokerMode === mode 
+                        ? 'border-amber-400 bg-amber-500/10 text-amber-300' 
+                        : 'border-white/5 bg-black/20 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {mode === 'open' ? 'Open Joker' : 'Secret Joker'}
                   </button>
                 ))}
               </div>

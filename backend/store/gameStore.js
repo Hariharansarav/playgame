@@ -23,6 +23,7 @@ class GameStore {
         turnDuration: settings.turnDuration || 30, // in seconds
         pointsLimit: settings.pointsLimit || 101, // drop out limit
         allowDrop: settings.allowDrop !== undefined ? settings.allowDrop : true,
+        jokerMode: settings.jokerMode || 'open', // 'open' or 'secret'
       },
       players: [],
       deck: [],
