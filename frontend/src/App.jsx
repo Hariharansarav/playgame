@@ -19,7 +19,7 @@ export default function App() {
     
     console.log(`Connecting to Rummy server at: ${backendUrl}`);
     const newSocket = io(backendUrl, {
-      transports: ['websocket', 'polling']
+      transports: ['polling', 'websocket']
     });
 
     setSocket(newSocket);
