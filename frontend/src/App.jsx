@@ -14,13 +14,8 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   useEffect(() => {
-    // Dynamically connect to backend
-    // If we are in dev (served on Vite port 5173), connect to backend port 5000.
-    // In production, connect directly to the origin host that served the frontend!
-    const isDev = window.location.port === '5173';
-    const backendUrl = isDev 
-      ? `http://${window.location.hostname}:5000` 
-      : window.location.origin;
+    // Connect to the hosted Render backend
+    const backendUrl = 'https://playgame-fnku.onrender.com';
     
     console.log(`Connecting to Rummy server at: ${backendUrl}`);
     const newSocket = io(backendUrl, {
