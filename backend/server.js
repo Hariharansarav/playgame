@@ -5,6 +5,12 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import registerSocketHandlers from './handlers/socketHandler.js';
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -14,10 +20,14 @@ app.use(cors({
 
 app.use(express.json());
 
+// Serve static assets in production
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+
 // Basic health check route
 app.get('/api/status', (req, res) => {
   res.json({ status: 'active', service: 'Rummy Multiplayer Game Server' });
 });
+
 
 const httpServer = createServer(app);
 
@@ -31,6 +41,11 @@ const io = new Server(httpServer, {
 
 // Register handlers
 registerSocketHandlers(io);
+
+// Wildcard route to serve index.html for client SPA router
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+});
 
 // Start Server
 httpServer.listen(PORT, '0.0.0.0', () => {
