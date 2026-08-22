@@ -1,6 +1,6 @@
 // frontend/src/components/GameBoard.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, LogOut, MessageSquare, Send, Sparkles, SlidersHorizontal, Trash2, ShieldAlert, Award, ArrowUpRight, HelpCircle } from 'lucide-react';
+import { Play, LogOut, MessageSquare, Send, Sparkles, SlidersHorizontal, Trash2, ShieldAlert, Award, ArrowUpRight, HelpCircle, LayoutGrid, CheckSquare } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 const SUIT_SYMBOLS = { H: '♥️', D: '♦️', C: '♣️', S: '♠️', J: '🃏' };
@@ -11,6 +11,7 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [declareTimer, setDeclareTimer] = useState(30);
+  const [spacedLayout, setSpacedLayout] = useState(true); // Default to Spaced (Free Space) Layout
   const chatEndRef = useRef(null);
 
   // Play audio note on events
@@ -91,9 +92,6 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
   const hasDrawn = player.hasDrawn;
 
   // Check if a card is acting as wild joker
-  // Under Secret Joker mode:
-  // Wildcards are hidden from players during standard drawing & discarding turns (isRevealed = false)
-  // and only revealed when someone finishes to validate the declaration (isRevealed = true)
   const isCardWildJoker = (card) => {
     if (!card) return false;
     if (card.suit === 'J' && card.rank === 'JOKER') return true; // Printed Joker always wild
@@ -134,6 +132,32 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
     socket.emit('discardCard', { roomCode: room.code, cardId, isFinish });
     setSelectedCardIds(new Set());
     playSound('discard');
+  };
+
+  // Drag-and-drop onto a card group (Free Space group management)
+  const handleDropOnGroup = (e, targetGroupIdx) => {
+    e.preventDefault();
+    const cardId = e.dataTransfer.getData('text/plain');
+    if (!cardId) return;
+
+    let draggedCard = null;
+    const updatedGroups = player.groups.map(group => {
+      const found = group.find(c => c.id === cardId);
+      if (found) draggedCard = found;
+      return group.filter(c => c.id !== cardId);
+    }).filter(group => group.length > 0);
+
+    if (!draggedCard) return;
+
+    if (targetGroupIdx >= updatedGroups.length) {
+      updatedGroups.push([draggedCard]);
+    } else {
+      updatedGroups[targetGroupIdx] = [...updatedGroups[targetGroupIdx], draggedCard];
+    }
+
+    socket.emit('groupCards', { roomCode: room.code, groups: updatedGroups });
+    setSelectedCardIds(new Set());
+    playSound('group');
   };
 
   // Select card toggle
@@ -308,37 +332,37 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
         onDragStart={(e) => handleDragStart(e, card.id)}
         onClick={() => !options.disabled && toggleSelectCard(card.id)}
         style={{
-          marginLeft: cardIdx > 0 ? '-2.5rem' : '0px',
+          marginLeft: (spacedLayout || cardIdx === 0) ? '0px' : '-2.25rem',
           zIndex: 10 + cardIdx,
         }}
         className={`w-14 h-20 sm:w-16 sm:h-24 bg-white rounded-xl shadow-card select-none flex flex-col justify-between p-1.5 sm:p-2 border-2 cursor-pointer transition-all relative transform hover:-translate-y-2 active:scale-95 ${
           isSelected 
             ? 'border-amber-400 bg-amber-50 shadow-card-hover -translate-y-4 ring-2 ring-amber-400/50' 
-            : 'border-slate-300'
-        } ${isWild ? 'ring-2 ring-yellow-400' : ''}`}
+            : 'border-slate-200'
+        } ${isWild ? 'ring-2 ring-yellow-400 animate-pulse-glow' : ''}`}
       >
         {isWild && (
-          <div className="absolute top-0 right-0 bg-yellow-400 text-slate-900 font-bold px-1 rounded-bl-lg rounded-tr-lg text-[8px] uppercase tracking-wider scale-90">
+          <div className="absolute top-0 right-0 bg-yellow-400 text-slate-900 font-extrabold px-1 rounded-bl-lg rounded-tr-lg text-[8px] uppercase tracking-wider scale-90">
             Joker
           </div>
         )}
 
         <div className="flex flex-col items-start leading-none">
-          <span className={`text-xs sm:text-sm font-extrabold ${isRed ? 'text-red-600' : 'text-slate-900'}`}>
+          <span className={`text-xs sm:text-sm font-black ${isRed ? 'text-red-600' : 'text-slate-900'}`}>
             {card.rank === 'JOKER' ? 'JK' : card.rank}
           </span>
-          <span className="text-[10px] sm:text-xs">{suitSymbol}</span>
+          <span className={`text-[10px] sm:text-xs ${isRed ? 'text-red-500' : 'text-slate-700'}`}>{suitSymbol}</span>
         </div>
 
-        <div className="text-center text-lg sm:text-2xl leading-none my-1">
+        <div className={`text-center text-lg sm:text-2xl leading-none my-1 filter drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)] ${isRed ? 'text-red-600' : 'text-slate-900'}`}>
           {suitSymbol}
         </div>
 
         <div className="flex flex-col items-end leading-none rotate-180">
-          <span className={`text-xs sm:text-sm font-extrabold ${isRed ? 'text-red-600' : 'text-slate-950'}`}>
+          <span className={`text-xs sm:text-sm font-black ${isRed ? 'text-red-600' : 'text-slate-900'}`}>
             {card.rank === 'JOKER' ? 'JK' : card.rank}
           </span>
-          <span className="text-[10px] sm:text-xs">{suitSymbol}</span>
+          <span className={`text-[10px] sm:text-xs ${isRed ? 'text-red-500' : 'text-slate-700'}`}>{suitSymbol}</span>
         </div>
       </div>
     );
@@ -347,8 +371,8 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
   // Seating grid around the table (Table seating format)
   const renderSeatingGrid = () => {
     return (
-      <div className="w-full flex-shrink-0 bg-black/30 border border-white/5 rounded-2xl p-2 max-h-24 overflow-y-auto">
-        <div className="flex flex-wrap gap-2 items-center justify-center">
+      <div className="w-full flex-shrink-0 bg-slate-950/70 border border-white/10 rounded-[2rem] p-3 max-h-24 overflow-y-auto backdrop-blur-md shadow-lg">
+        <div className="flex flex-wrap gap-2.5 items-center justify-center">
           {room.players.map((p, idx) => {
             const isCurrent = room.currentPlayerIdx === idx && room.status === 'PLAYING';
             const isMe = p.id === player.id;
@@ -356,36 +380,36 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
             return (
               <div 
                 key={p.id}
-                className={`px-3 py-1.5 rounded-xl flex items-center space-x-2 transition-all border text-xs shrink-0 ${
+                className={`px-3.5 py-2 rounded-2xl flex items-center space-x-2 transition-all border text-xs shrink-0 shadow-md ${
                   isCurrent 
-                    ? 'bg-amber-500/10 border-amber-500/50 shadow-lg shadow-amber-500/5 animate-pulse-glow ring-1 ring-amber-400/30' 
+                    ? 'bg-amber-500/10 border-amber-500/60 shadow-lg animate-pulse-glow ring-1 ring-amber-400/30' 
                     : p.disconnected 
                       ? 'bg-red-950/20 border-red-900/30 opacity-40' 
                       : p.hasDropped
                         ? 'bg-slate-900/40 border-white/5 opacity-50'
                         : isMe
-                          ? 'bg-green-500/5 border-green-500/20'
-                          : 'bg-black/20 border-white/5'
+                          ? 'bg-green-500/5 border-green-500/25'
+                          : 'bg-black/40 border-white/10'
                 }`}
               >
-                <span className="text-lg">{p.avatar}</span>
+                <span className="text-xl p-1 bg-slate-900 rounded-lg border border-white/5">{p.avatar}</span>
                 <div className="flex flex-col">
-                  <span className="font-semibold text-[11px] max-w-[80px] truncate">
+                  <span className="font-extrabold text-[11px] max-w-[85px] truncate text-white flex items-center">
                     {p.nickname}
-                    {isMe && <span className="text-[8px] text-green-400 font-bold ml-0.5">Y</span>}
+                    {isMe && <span className="text-[8px] text-green-400 font-bold ml-1 uppercase">You</span>}
                   </span>
                   
                   {p.hasDropped ? (
-                    <span className="text-[8px] text-red-400 font-bold uppercase tracking-tight">Dropped</span>
+                    <span className="text-[8px] text-red-400 font-black uppercase tracking-wider">Dropped</span>
                   ) : room.status === 'PLAYING' ? (
-                    <span className="text-[8px] text-gray-400 font-mono">{p.hand?.length || 13}c</span>
+                    <span className="text-[8px] text-gray-400 font-bold font-mono tracking-wider">{p.hand?.length || 13} Cards</span>
                   ) : (
-                    <span className="text-[8px] text-amber-500 font-bold">Pts: {p.score}</span>
+                    <span className="text-[8px] text-amber-500 font-black">Pts: {p.score}</span>
                   )}
                 </div>
 
                 {isCurrent && (
-                  <div className="bg-amber-500 text-slate-950 px-1 rounded font-bold font-mono text-[9px] ml-1.5">
+                  <div className="bg-amber-500 text-slate-950 px-2 py-0.5 rounded-lg font-black font-mono text-[10px] ml-1.5 shadow-sm">
                     {Math.max(0, room.settings.turnDuration - Math.floor((Date.now() - room.turnStartTime) / 1000))}s
                   </div>
                 )}
@@ -401,28 +425,29 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
   const showSecretJoker = isSecretJoker && !(room.status === 'DECLARING' || room.status === 'ROUND_END' || room.status === 'GAME_OVER');
 
   return (
-    <div className="w-full h-[calc(100vh-6.5rem)] flex flex-col justify-between overflow-hidden relative select-none">
+    <div className="w-full h-[calc(100vh-6.5rem)] flex flex-col justify-between overflow-hidden relative select-none font-sans">
       
       {/* 1. Seats Table Header */}
       {renderSeatingGrid()}
 
       {/* 2. Board Center Felt (Closed Deck, Open Deck, Wild Joker, and Drag drop handlers) */}
       <div className="w-full flex-grow overflow-hidden flex items-center justify-center p-2 relative">
-        <div className="w-full max-w-xl bg-poker-felt border-4 border-poker-wood rounded-[3xl] py-4 px-6 shadow-felt-inner flex flex-row items-center justify-around gap-4 select-none relative h-full max-h-56 sm:max-h-64">
+        <div className="w-full max-w-2xl bg-poker-felt border-[6px] border-amber-950/80 rounded-[3rem] py-5 px-8 shadow-2xl flex flex-row items-center justify-around gap-4 select-none relative h-full max-h-56 sm:max-h-68">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.03)_0%,rgba(0,0,0,0.35)_100%)] pointer-events-none rounded-[2.5rem]" />
           
           {/* Closed Deck (Draw Pile) */}
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] text-green-300 font-semibold mb-1 uppercase tracking-wide">Draw Pile</span>
+          <div className="flex flex-col items-center z-10">
+            <span className="text-[9px] text-green-300 font-black uppercase tracking-wider mb-1.5">Draw Pile</span>
             <div 
               onClick={() => handleDraw('deck')}
-              className={`w-16 h-24 bg-gradient-to-br from-red-800 to-red-950 border-2 border-amber-500 rounded-2xl shadow-card hover:shadow-card-hover flex items-center justify-center text-center cursor-pointer transition-all transform hover:-translate-y-1 active:scale-95 ${
+              className={`w-16 h-24 bg-gradient-to-br from-red-700 via-red-800 to-red-950 border-2 border-amber-500 rounded-2xl shadow-card hover:shadow-card-hover flex items-center justify-center text-center cursor-pointer transition-all transform hover:-translate-y-1.5 active:scale-95 ${
                 isMyTurn && !hasDrawn ? 'ring-4 ring-yellow-400 ring-offset-2 ring-offset-green-800 animate-pulse' : ''
               }`}
             >
-              <div className="w-full h-full border border-red-700 rounded-xl m-1 flex flex-col items-center justify-center relative bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.05)_0%,rgba(0,0,0,0.4)_100%)]">
-                <span className="text-lg">♣️</span>
-                <span className="text-[9px] text-red-300 uppercase tracking-widest font-bold">RUMMY</span>
-                <span className="absolute bottom-1 text-[9px] text-red-400 font-mono font-semibold">
+              <div className="w-full h-full border border-red-600 rounded-xl m-1 flex flex-col items-center justify-center relative bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08)_0%,rgba(0,0,0,0.45)_100%)]">
+                <span className="text-xl filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]">♣️</span>
+                <span className="text-[8px] text-red-200 uppercase tracking-widest font-black mt-1">Rummy</span>
+                <span className="absolute bottom-1 bg-black/40 text-amber-400 border border-white/5 px-2 py-0.5 rounded-full text-[9px] font-mono font-black shadow-inner">
                   {room.deck?.length || 0}
                 </span>
               </div>
@@ -430,32 +455,32 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
           </div>
 
           {/* Wild Joker Indicator */}
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] text-yellow-300 font-semibold mb-1 uppercase tracking-wide">Wild Joker</span>
+          <div className="flex flex-col items-center z-10">
+            <span className="text-[9px] text-yellow-300 font-black uppercase tracking-wider mb-1.5">Wild Joker</span>
             {room.wildJoker ? (
               showSecretJoker ? (
                 // Secret Joker Card Back
-                <div className="w-16 h-24 bg-gradient-to-br from-blue-800 to-blue-950 border-2 border-blue-400 rounded-2xl shadow-card flex flex-col items-center justify-center text-blue-200 relative">
-                  <span className="text-xl">❓</span>
-                  <span className="text-[9px] text-blue-300 font-bold uppercase tracking-wider mt-1">Secret</span>
+                <div className="w-16 h-24 bg-gradient-to-br from-blue-700 to-blue-900 border-2 border-blue-400 rounded-2xl shadow-card flex flex-col items-center justify-center text-blue-200 relative">
+                  <span className="text-2xl animate-pulse">❓</span>
+                  <span className="text-[8px] text-blue-200 font-black uppercase tracking-widest mt-1">Secret</span>
                 </div>
               ) : (
                 // Open Wild Joker
                 <div className="w-16 h-24 bg-white border-2 border-yellow-400 rounded-2xl shadow-card flex flex-col justify-between p-1.5 text-slate-900 relative">
-                  <span className="absolute top-0 right-0 bg-yellow-400 text-slate-950 font-bold px-0.5 rounded-bl-md text-[7px] uppercase scale-90">Wild</span>
-                  <div className="leading-none text-[10px] font-extrabold flex flex-col">
+                  <div className="absolute top-0 right-0 bg-yellow-400 text-slate-950 font-black px-1 rounded-bl-md text-[7px] uppercase scale-90">Wild</div>
+                  <div className="leading-none text-[10px] font-black flex flex-col">
                     <span>{room.wildJoker.rank === 'JOKER' ? 'JK' : room.wildJoker.rank}</span>
                     <span className="text-xs">{SUIT_SYMBOLS[room.wildJoker.suit]}</span>
                   </div>
                   <div className="text-center text-xl my-1">{SUIT_SYMBOLS[room.wildJoker.suit]}</div>
-                  <div className="leading-none text-[10px] font-extrabold flex flex-col items-end rotate-180">
+                  <div className="leading-none text-[10px] font-black flex flex-col items-end rotate-180">
                     <span>{room.wildJoker.rank === 'JOKER' ? 'JK' : room.wildJoker.rank}</span>
                     <span className="text-xs">{SUIT_SYMBOLS[room.wildJoker.suit]}</span>
                   </div>
                 </div>
               )
             ) : (
-              <div className="w-16 h-24 bg-green-900/30 border border-green-800 border-dashed rounded-2xl flex items-center justify-center text-green-700 text-xs">
+              <div className="w-16 h-24 bg-green-950/40 border border-green-800 border-dashed rounded-2xl flex items-center justify-center text-green-700 text-xs font-bold shadow-inner">
                 None
               </div>
             )}
@@ -465,14 +490,14 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
           <div 
             onDragOver={handleDragOver}
             onDrop={(e) => handleDropOnDiscard(e, false)}
-            className="flex flex-col items-center"
+            className="flex flex-col items-center z-10"
           >
-            <span className="text-[10px] text-green-300 font-semibold mb-1 uppercase tracking-wide">Discard (Drop)</span>
+            <span className="text-[9px] text-green-300 font-black uppercase tracking-wider mb-1.5">Discard Pile</span>
             
             {room.discardPile && room.discardPile.length > 0 ? (
               <div 
                 onClick={() => handleDraw('discard')}
-                className={`w-16 h-24 bg-white text-slate-900 rounded-2xl shadow-card border-2 border-slate-200 flex flex-col justify-between p-1.5 cursor-pointer transition-all transform hover:-translate-y-1 active:scale-95 ${
+                className={`w-16 h-24 bg-white text-slate-900 rounded-2xl shadow-card border-2 border-slate-200 flex flex-col justify-between p-1.5 cursor-pointer transition-all transform hover:-translate-y-1.5 active:scale-95 ${
                   isMyTurn && !hasDrawn ? 'ring-4 ring-yellow-400 ring-offset-2 ring-offset-green-800 animate-pulse' : ''
                 }`}
               >
@@ -482,7 +507,7 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
                   const isWild = isCardWildJoker(topCard);
                   return (
                     <>
-                      <div className="leading-none text-[10px] font-extrabold flex flex-col">
+                      <div className="leading-none text-[10px] font-black flex flex-col">
                         <span className={isRed ? 'text-red-600' : 'text-slate-950'}>
                           {topCard.rank === 'JOKER' ? 'JK' : topCard.rank}
                         </span>
@@ -491,10 +516,10 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
                       
                       <div className="text-center text-xl my-1 relative">
                         {SUIT_SYMBOLS[topCard.suit]}
-                        {isWild && <span className="absolute -top-1 -right-1 text-[7px] bg-yellow-400 text-slate-900 font-bold px-0.5 rounded">W</span>}
+                        {isWild && <span className="absolute -top-1.5 -right-1.5 text-[8px] bg-yellow-400 text-slate-900 font-black px-1 rounded shadow-sm">W</span>}
                       </div>
 
-                      <div className="leading-none text-[10px] font-extrabold flex flex-col items-end rotate-180">
+                      <div className="leading-none text-[10px] font-black flex flex-col items-end rotate-180">
                         <span className={isRed ? 'text-red-600' : 'text-slate-950'}>
                           {topCard.rank === 'JOKER' ? 'JK' : topCard.rank}
                         </span>
@@ -505,7 +530,7 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
                 })()}
               </div>
             ) : (
-              <div className="w-16 h-24 bg-green-900/30 border border-green-800 border-dashed rounded-2xl flex items-center justify-center text-green-700 text-xs">
+              <div className="w-16 h-24 bg-green-950/40 border border-green-800 border-dashed rounded-2xl flex items-center justify-center text-green-700 text-xs font-bold shadow-inner">
                 Empty
               </div>
             )}
@@ -515,12 +540,16 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
           <div 
             onDragOver={handleDragOver}
             onDrop={(e) => handleDropOnDiscard(e, true)}
-            className="flex flex-col items-center"
+            className="flex flex-col items-center z-10"
           >
-            <span className="text-[10px] text-yellow-300 font-semibold mb-1 uppercase tracking-wide">Finish Zone</span>
-            <div className="w-16 h-24 border-2 border-dashed border-amber-500/50 bg-amber-500/5 hover:bg-amber-500/10 rounded-2xl flex flex-col items-center justify-center text-amber-300 text-[10px] font-bold text-center p-1 transition-all cursor-default">
-              <ArrowUpRight size={18} className="text-amber-400 mb-1" />
-              <span>Drag card here to Finish</span>
+            <span className="text-[9px] text-yellow-300 font-black uppercase tracking-wider mb-1.5">Finish Slot</span>
+            <div className={`w-16 h-24 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center p-1.5 transition-all cursor-default ${
+              isMyTurn && hasDrawn 
+                ? 'border-yellow-400 bg-yellow-400/10 text-yellow-300 animate-pulse-glow' 
+                : 'border-amber-500/30 bg-amber-500/5 text-amber-400/60'
+            }`}>
+              <ArrowUpRight size={18} className="mb-1" />
+              <span className="text-[8px] uppercase tracking-wider font-extrabold leading-tight">Drag Card to Finish</span>
             </div>
           </div>
 
@@ -528,26 +557,28 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
       </div>
 
       {/* 3. Player Hand Area & Action Column (Bottom Fixed Height Row) */}
-      <div className="w-full flex-shrink-0 bg-slate-900/90 border-t border-white/5 p-4 flex flex-col md:flex-row gap-4 h-64 md:h-52 overflow-hidden select-none">
+      <div className="w-full flex-shrink-0 bg-slate-950/95 border-t border-white/10 p-4 flex flex-col md:flex-row gap-4 h-68 md:h-56 overflow-hidden">
         
         {/* Left Hand: Overlapping Card Groups list (Scrollable horizontally/vertically) */}
-        <div className="flex-grow overflow-y-auto bg-black/40 border border-white/5 rounded-2xl p-2.5 flex flex-col space-y-3.5 pr-2">
+        <div className="flex-grow overflow-y-auto bg-black/50 border border-white/5 rounded-2xl p-3 flex flex-col space-y-4.5 pr-2 shadow-inner">
           {player.groups?.map((group, groupIdx) => (
             <div 
               key={groupIdx} 
-              className="bg-black/20 border border-white/5 rounded-xl p-2 flex items-center justify-between gap-4 h-16 sm:h-20"
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDropOnGroup(e, groupIdx)}
+              className="bg-black/35 border border-white/5 rounded-2xl p-2 flex items-center justify-between gap-4 min-h-[5.5rem] sm:min-h-[6rem] transition-all hover:bg-black/45 hover:border-white/10"
             >
-              {/* Cards horizontally overlapping */}
-              <div className="flex items-center pl-3 py-1 flex-grow overflow-x-auto w-full md:w-auto h-full scroll-smooth">
+              {/* Cards layout - dynamic spacing (Free Space vs Stacked) */}
+              <div className={`flex items-center pl-3 py-1.5 flex-grow overflow-x-auto w-full md:w-auto h-full scroll-smooth ${spacedLayout ? 'gap-2' : ''}`}>
                 {group.map((card, cardIdx) => renderCard(card, groupIdx, cardIdx))}
               </div>
 
               {/* Add Here/Dissolve tools */}
-              <div className="flex items-center space-x-1 shrink-0">
+              <div className="flex items-center space-x-1 shrink-0 px-2">
                 {selectedCardIds.size > 0 && (
                   <button
                     onClick={() => handleMoveToGroup(groupIdx)}
-                    className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[9px] font-bold transition-all"
+                    className="px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
                   >
                     Add
                   </button>
@@ -555,74 +586,92 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
                 {player.groups.length > 1 && (
                   <button
                     onClick={() => handleDissolveGroup(groupIdx)}
-                    className="p-1.5 bg-red-950/20 border border-red-900/30 text-red-400 hover:bg-red-950/40 rounded-lg transition-all"
-                    title="Dissolve"
+                    className="p-2 bg-red-950/30 border border-red-900/30 text-red-400 hover:bg-red-950/50 rounded-xl transition-all shadow active:scale-90"
+                    title="Dissolve Group"
                   >
-                    <Trash2 size={12} />
+                    <Trash2 size={13} />
                   </button>
                 )}
               </div>
             </div>
           ))}
 
-          {selectedCardIds.size > 0 && (
-            <button
-              onClick={() => handleMoveToGroup(player.groups.length)}
-              className="w-full py-2 border border-dashed border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 text-gray-400 hover:text-amber-300 rounded-xl text-[10px] font-semibold tracking-wider transition-all"
-            >
-              + Create New Group with Selected Cards
-            </button>
-          )}
+          {/* Draggable Zone/Button to create a new group with drag drop support */}
+          <div 
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDropOnGroup(e, player.groups?.length || 0)}
+            onClick={() => handleMoveToGroup(player.groups?.length || 0)}
+            className="w-full py-3.5 border-2 border-dashed border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 text-gray-500 hover:text-amber-400 rounded-2xl text-[10px] font-bold tracking-wider transition-all text-center cursor-pointer shadow-sm"
+          >
+            {selectedCardIds.size > 0 
+              ? '✨ Click here or Drag cards to create a New Group' 
+              : '📥 Drag any card here to start a New Group'}
+          </div>
         </div>
 
         {/* Right Column: Hand Action Buttons Stack (Single Column as requested) */}
-        <div className="w-full md:w-52 flex-shrink-0 bg-slate-900 border border-white/10 p-2.5 rounded-2xl flex flex-col justify-between space-y-1.5">
+        <div className="w-full md:w-56 flex-shrink-0 bg-slate-900 border border-white/10 p-3.5 rounded-[2rem] flex flex-col justify-between space-y-2.5 shadow-xl">
           
-          <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider pb-1 border-b border-white/5 flex items-center justify-between">
-            <span>Control Panel</span>
-            {isMyTurn && <span className="text-[9px] text-amber-400 animate-pulse">Your Turn</span>}
+          <div className="text-[10px] text-gray-400 font-black uppercase tracking-wider pb-1.5 border-b border-white/5 flex items-center justify-between">
+            <span>Control Deck</span>
+            {isMyTurn && <span className="text-[9px] font-bold text-amber-400 animate-pulse-glow px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20">Active Turn</span>}
           </div>
 
           {/* Action buttons stack */}
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => handleSort('suit')}
-              className="py-1 px-2 bg-slate-800 hover:bg-slate-700 text-gray-200 rounded-lg border border-white/5 text-[10px] font-semibold flex items-center justify-center space-x-1 transition-all"
+              className="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-gray-200 rounded-xl border border-white/5 text-[10px] font-bold flex items-center justify-center space-x-1.5 transition-all shadow-sm"
             >
               <Sparkles size={11} className="text-amber-400" />
               <span>Sort Suit</span>
             </button>
             <button
               onClick={() => handleSort('rank')}
-              className="py-1 px-2 bg-slate-800 hover:bg-slate-700 text-gray-200 rounded-lg border border-white/5 text-[10px] font-semibold flex items-center justify-center space-x-1 transition-all"
+              className="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-gray-200 rounded-xl border border-white/5 text-[10px] font-bold flex items-center justify-center space-x-1.5 transition-all shadow-sm"
             >
               <Sparkles size={11} className="text-yellow-400" />
               <span>Sort Rank</span>
             </button>
           </div>
 
+          {/* Layout spacing switcher (Free space cards) */}
+          <div className="grid grid-cols-1">
+            <button
+              onClick={() => setSpacedLayout(!spacedLayout)}
+              className={`py-1.5 px-3 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center justify-center space-x-2 transition-all shadow-sm ${
+                spacedLayout 
+                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-400 hover:shadow-glow-yellow' 
+                  : 'bg-slate-800 hover:bg-slate-700 text-gray-200 border-white/5'
+              }`}
+            >
+              <LayoutGrid size={11} />
+              <span>Layout: {spacedLayout ? 'Free Space' : 'Stacked'}</span>
+            </button>
+          </div>
+
           <button
             onClick={handleGroupSelected}
             disabled={selectedCardIds.size < 2}
-            className="w-full py-1.5 bg-amber-500 disabled:bg-slate-800 hover:bg-amber-600 disabled:text-gray-500 text-slate-950 font-extrabold rounded-lg text-[10px] transition-all uppercase tracking-wider"
+            className="w-full py-2 bg-gradient-to-r from-amber-500 to-yellow-400 disabled:from-slate-800 disabled:to-slate-800 hover:brightness-110 disabled:brightness-100 disabled:opacity-40 disabled:text-gray-500 text-slate-950 font-black rounded-xl text-[10px] transition-all uppercase tracking-wider shadow"
           >
             Group Selected ({selectedCardIds.size})
           </button>
 
           {isMyTurn ? (
-            <div className="flex flex-col space-y-1">
-              <div className="grid grid-cols-2 gap-1.5">
+            <div className="flex flex-col space-y-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => handleDiscard(false)}
                   disabled={!hasDrawn || selectedCardIds.size !== 1}
-                  className="py-1.5 bg-slate-800 disabled:bg-slate-950 hover:bg-slate-750 disabled:text-gray-600 text-gray-200 border border-white/5 disabled:border-transparent font-bold rounded-lg text-[10px] transition-all"
+                  className="py-2 bg-slate-800 disabled:bg-slate-950 hover:bg-slate-750 disabled:text-gray-600 text-gray-200 border border-white/5 disabled:border-transparent font-extrabold rounded-xl text-[10px] uppercase tracking-wider transition-all shadow-sm"
                 >
                   Discard
                 </button>
                 <button
                   onClick={() => handleDiscard(true)}
                   disabled={!hasDrawn || selectedCardIds.size !== 1}
-                  className="py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 disabled:from-slate-950 disabled:to-slate-950 disabled:text-gray-600 disabled:opacity-50 text-slate-950 font-bold rounded-lg text-[10px] transition-all"
+                  className="py-2 bg-gradient-to-r from-amber-500 to-yellow-400 disabled:from-slate-950 disabled:to-slate-950 disabled:text-gray-600 disabled:opacity-40 text-slate-950 font-black rounded-xl text-[10px] uppercase tracking-wider transition-all shadow"
                 >
                   Declare
                 </button>
@@ -631,14 +680,14 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
               {room.settings.allowDrop && (
                 <button
                   onClick={handleDrop}
-                  className="w-full py-1 bg-red-950/30 hover:bg-red-950/50 border border-red-900/30 text-red-400 font-bold rounded-lg text-[9px] transition-all"
+                  className="w-full py-1.5 bg-red-950/20 hover:bg-red-950/40 border border-red-900/30 text-red-400 font-extrabold rounded-xl text-[9px] uppercase tracking-wider transition-all"
                 >
                   Drop Hand
                 </button>
               )}
             </div>
           ) : (
-            <div className="py-2.5 px-1.5 rounded-lg bg-black/40 text-[9px] text-center text-gray-400 border border-white/5">
+            <div className="py-3 px-2 rounded-xl bg-black/40 text-[9px] font-bold text-center text-gray-400 border border-white/5 shadow-inner">
               Wait for your turn to play
             </div>
           )}
@@ -650,11 +699,11 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
       <div className="fixed bottom-4 right-4 z-40">
         <button
           onClick={() => setChatOpen(!chatOpen)}
-          className="p-3 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-full shadow-2xl flex items-center justify-center transition-all transform hover:scale-105 active:scale-95"
+          className="p-3 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-full shadow-2xl flex items-center justify-center transition-all transform hover:scale-105 active:scale-95 relative"
         >
           <MessageSquare size={20} />
           {room.chatLogs?.length > 0 && (
-            <span className="absolute top-0 right-0 bg-red-600 border border-slate-950 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white">
+            <span className="absolute -top-1.5 -right-1.5 bg-red-600 border-2 border-slate-950 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-white shadow-md">
               {room.chatLogs.length}
             </span>
           )}
@@ -663,13 +712,15 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
 
       {/* Chat pane */}
       {chatOpen && (
-        <div className="fixed bottom-20 right-4 w-72 h-80 bg-slate-900/95 border border-white/10 rounded-2xl shadow-2xl z-40 overflow-hidden flex flex-col animate-deal-card">
-          <div className="p-2 bg-black/40 border-b border-white/5 flex items-center justify-between">
-            <span className="font-bold text-[10px] uppercase tracking-wider text-gray-300">Room Chat & Logs</span>
-            <button onClick={() => setChatOpen(false)} className="text-[10px] text-gray-500 hover:text-white">Close</button>
+        <div className="fixed bottom-20 right-4 w-76 h-88 bg-slate-950/95 border border-white/10 rounded-[2rem] shadow-2xl z-40 overflow-hidden flex flex-col animate-deal-card backdrop-blur-xl">
+          <div className="p-3.5 bg-black/40 border-b border-white/5 flex items-center justify-between">
+            <span className="font-black text-[10px] uppercase tracking-widest text-gray-300 flex items-center gap-1.5">
+              <MessageSquare size={12} className="text-amber-400" /> Room Logs & Chat
+            </span>
+            <button onClick={() => setChatOpen(false)} className="text-[10px] font-bold uppercase tracking-wider text-gray-500 hover:text-white">Close</button>
           </div>
 
-          <div className="flex-grow overflow-y-auto p-2.5 space-y-2 text-[10px]">
+          <div className="flex-grow overflow-y-auto p-4 space-y-2.5 text-[10px]">
             {(() => {
               const combined = [
                 ...room.chatLogs.map(c => ({ ...c, type: 'chat' })),
@@ -679,14 +730,14 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
               return combined.map((item, idx) => {
                 if (item.type === 'log') {
                   return (
-                    <div key={`l-${item.id || idx}`} className="text-[9px] text-green-400/80 bg-green-500/5 border border-green-500/10 px-2 py-0.5 rounded italic">
+                    <div key={`l-${item.id || idx}`} className="text-[9px] text-green-400 bg-green-500/5 border border-green-500/10 px-2.5 py-1 rounded-xl italic font-medium shadow-sm">
                       {item.text}
                     </div>
                   );
                 }
                 return (
-                  <div key={`c-${item.id || idx}`} className="bg-black/30 border border-white/5 p-1.5 rounded-lg">
-                    <span className="font-bold text-amber-400 block mb-0.5">{item.sender}</span>
+                  <div key={`c-${item.id || idx}`} className="bg-black/35 border border-white/5 p-2 rounded-xl shadow-sm">
+                    <span className="font-extrabold text-amber-400 block mb-0.5">{item.sender}</span>
                     <p className="text-gray-200">{item.text}</p>
                   </div>
                 );
@@ -695,15 +746,15 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
             <div ref={chatEndRef} />
           </div>
 
-          <form onSubmit={handleSendChat} className="p-1.5 bg-black/40 border-t border-white/5 flex items-center space-x-1.5">
+          <form onSubmit={handleSendChat} className="p-2 bg-black/40 border-t border-white/5 flex items-center space-x-1.5">
             <input
               type="text"
-              placeholder="Send message..."
+              placeholder="Type chat message..."
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              className="flex-grow bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 outline-none text-[10px] text-white focus:border-amber-500"
+              className="flex-grow bg-black/50 border border-white/10 rounded-xl px-3 py-2 outline-none text-[10px] text-white focus:border-amber-400 shadow-inner placeholder:text-gray-600"
             />
-            <button type="submit" className="p-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg">
+            <button type="submit" className="p-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl shadow active:scale-90">
               <Send size={12} />
             </button>
           </form>
@@ -712,47 +763,47 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
 
       {/* 5. Declaring Overlay Screen */}
       {isDeclaringMode && room.declareState && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-md bg-slate-900 border-2 border-amber-500/50 p-5 rounded-3xl shadow-2xl flex flex-col items-center text-center max-h-[90vh] overflow-y-auto">
-            <span className="text-4xl animate-bounce mb-2">🔔</span>
-            <h2 className="text-xl font-extrabold text-white">Declaration In Progress</h2>
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md bg-slate-900 border-2 border-amber-500/50 p-6 rounded-[2.5rem] shadow-2xl flex flex-col items-center text-center max-h-[90vh] overflow-y-auto animate-deal-card">
+            <span className="text-5xl animate-bounce mb-3 filter drop-shadow-[0_2px_8px_rgba(234,179,8,0.3)]">🔔</span>
+            <h2 className="text-xl font-black text-white uppercase tracking-wider">Declaration Active</h2>
             
             {room.declareState.declarantId === player.id ? (
-              <p className="text-xs text-gray-400 mt-1.5 max-w-sm">
-                You finished the game! Waiting for other players to submit their card groupings for scoring evaluation.
+              <p className="text-xs text-gray-400 mt-2 max-w-xs font-semibold">
+                Waiting for the other players at the table to arrange their final cards and submit for score evaluation.
               </p>
             ) : (
               <div className="w-full">
-                <p className="text-xs text-amber-300 mt-1.5 font-medium">
+                <p className="text-xs text-amber-300 mt-2 font-extrabold uppercase tracking-wide">
                   {room.players.find(p => p.id === room.declareState.declarantId)?.nickname} declared their hand!
                 </p>
-                <p className="text-[10px] text-gray-400 mt-1 max-w-sm mx-auto">
-                  Arrange your final cards in valid sequences and sets in your hand now, and click **Submit Declaration** below!
+                <p className="text-[10px] text-gray-400 mt-1 max-w-xs mx-auto leading-relaxed">
+                  Arrange your final sequences and sets in your hand now, and submit your declaration before the clock runs out!
                 </p>
               </div>
             )}
 
             {/* Countdown timer */}
-            <div className="my-4 bg-amber-500/10 border border-amber-500/20 px-5 py-1.5 rounded-xl text-center">
-              <span className="text-[9px] text-gray-400 block uppercase font-bold tracking-wider">Remaining Time</span>
-              <span className="text-2xl font-black font-mono text-amber-400">{declareTimer}s</span>
+            <div className="my-5 bg-amber-500/10 border border-amber-500/25 px-6 py-2 rounded-2xl text-center shadow-inner">
+              <span className="text-[9px] text-gray-400 block uppercase font-black tracking-widest">Time Remaining</span>
+              <span className="text-3xl font-black font-mono text-amber-400">{declareTimer}s</span>
             </div>
 
             {/* Show Submitted list */}
-            <div className="w-full border-t border-white/5 pt-3 text-left">
-              <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-2">Submissions Status:</h4>
-              <div className="space-y-1.5">
+            <div className="w-full border-t border-white/5 pt-4 text-left">
+              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2.5">Submissions Received:</h4>
+              <div className="space-y-2">
                 {room.players.map(p => {
                   if (p.id === room.declareState.declarantId) return null;
                   if (p.hasDropped) return null;
                   const submitted = !!room.declareState.answersSubmitted[p.id];
                   return (
-                    <div key={p.id} className="flex items-center justify-between text-[10px] py-1 px-2.5 rounded-lg bg-black/20">
-                      <span className="font-semibold text-gray-200">{p.avatar} {p.nickname}</span>
+                    <div key={p.id} className="flex items-center justify-between text-[10px] py-2 px-3.5 rounded-xl bg-black/30 border border-white/5">
+                      <span className="font-extrabold text-gray-200">{p.avatar} {p.nickname}</span>
                       {submitted ? (
-                        <span className="text-green-400 font-bold">Submitted</span>
+                        <span className="text-green-400 font-bold flex items-center gap-1">Submitted <CheckSquare size={10} /></span>
                       ) : (
-                        <span className="text-gray-500 italic animate-pulse">Arranging hand...</span>
+                        <span className="text-gray-500 italic animate-pulse">Arranging...</span>
                       )}
                     </div>
                   );
@@ -762,13 +813,13 @@ export default function GameBoard({ socket, room, player, soundEnabled }) {
 
             {/* Action for non-declarant players */}
             {room.declareState.declarantId !== player.id && !player.hasDropped && (
-              <div className="w-full mt-4 flex flex-col items-center">
+              <div className="w-full mt-5 flex flex-col items-center">
                 <button
                   onClick={handleSubmitDeclaration}
                   disabled={!!room.declareState.answersSubmitted[player.id]}
-                  className="w-full py-2.5 bg-green-600 disabled:bg-slate-800 disabled:text-gray-500 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg transition-all text-xs"
+                  className="w-full py-3.5 bg-gradient-to-r from-green-500 to-emerald-600 disabled:from-slate-800 disabled:to-slate-800 disabled:text-gray-500 hover:brightness-110 active:scale-95 text-white font-black rounded-2xl shadow-lg transition-all text-xs uppercase tracking-widest"
                 >
-                  {room.declareState.answersSubmitted[player.id] ? 'Hand Submitted' : 'Submit Hand Declaration'}
+                  {room.declareState.answersSubmitted[player.id] ? 'Declaration Completed' : 'Submit Hand Declaration'}
                 </button>
               </div>
             )}
